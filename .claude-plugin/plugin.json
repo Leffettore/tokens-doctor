@@ -1,0 +1,8 @@
+{
+  "name": "tokens-doctor",
+  "version": "0.2.0",
+  "description": "Idle-time context doctor: after 5 idle minutes it types /compact in your tmux pane or sounds an alarm to /clear, and alarms on /exit if the context should have been compacted.",
+  "author": { "name": "Leffettore", "url": "https://github.com/Leffettore" },
+  "repository": "https://github.com/Leffettore/tokens-doctor",
+  "keywords": ["context", "compact", "tmux", "idle", "tokens"]
+}

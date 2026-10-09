@@ -43,20 +43,20 @@ Requires `node` and `tmux`. For the alarm: `notify-send` and `canberra-gtk-play`
 desktop Ubuntu.
 
 ```bash
-git clone https://github.com/Leffettore/tokens-doctor.git
-cd tokens-doctor
-./install.sh              # copies idle-timer.js to ~/.claude and registers the 3 hooks
-./install.sh --uninstall  # removes both
+claude plugin marketplace add Leffettore/tokens-doctor
+claude plugin install tokens-doctor@tokens-doctor
+# or, inside Claude Code (2.1.275+): /plugin install tokens-doctor --marketplace Leffettore/tokens-doctor
 ```
 
-The installer keeps your existing hooks, is safe to re-run, and saves your original `settings.json` as
-`settings.json.bak`. Restart running Claude Code sessions afterwards, and run `claude` inside tmux.
+Restart running Claude Code sessions, and run `claude` inside tmux. Remove with `claude plugin uninstall tokens-doctor`.
+
+Upgrading from the old `install.sh` version: delete `~/.claude/idle-timer.js` and the three hooks that call it from
+`~/.claude/settings.json` (Stop, UserPromptSubmit, SessionEnd), otherwise both would run.
 
 ## Configuration (environment variables)
 
-Hooks run under Claude Code's background daemon, so variables exported in your shell may not reach them. Set them in the
-hook command in `~/.claude/settings.json`, e.g. `CLAUDE_IDLE_MS=60000 CLAUDE_WINDOW=1000000 node ~/.claude/idle-timer.js`
-(`CLAUDE_WINDOW` is also needed on the `--end` hook).
+Set them in the `env` block of `~/.claude/settings.json` (applied to every session; not tested through the hooks'
+daemon yet), e.g. `{ "env": { "CLAUDE_IDLE_MS": "60000", "CLAUDE_WINDOW": "1000000" } }`.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -76,7 +76,7 @@ alias idlelog='tail -f ~/.claude/idle.log'                    # watch decisions 
 alias idlelast='grep -E "decision|sent /compact" ~/.claude/idle.log | tail -10'
 alias idletimers='pgrep -af "idle-timer.js --wait"'           # running timers
 alias idlestop='pkill -f "idle-timer.js --wait"'              # cancel all timers
-alias idletest='node ~/.claude/idle-timer.js --selftest'      # check the decision rules
+alias idletest='node $(ls -d ~/.claude/plugins/cache/tokens-doctor/tokens-doctor/*/scripts/idle-timer.js | tail -1) --selftest'
 ```
 
 Reading a log line:
@@ -87,13 +87,13 @@ idle 300000ms elapsed, compact [My session]      what was done, for which sessio
 sent /compact to tmux pane %3                    where it was typed
 ```
 
-Quick manual check without waiting 5 minutes: put `CLAUDE_IDLE_MS=15000` in front of the Stop hook command in
-`~/.claude/settings.json`, send a prompt, wait 15 seconds, run `idlelast`. Remove it afterwards.
+Quick manual check without waiting 5 minutes: set `"CLAUDE_IDLE_MS": "15000"` in the `env` block of
+`~/.claude/settings.json`, restart the session, send a prompt, wait 15 seconds, run `idlelast`. Remove it afterwards.
 
 ## Testing
 
 ```bash
-node idle-timer.js --selftest          # decision rules
+node scripts/idle-timer.js --selftest  # decision rules
 tail -f ~/.claude/idle.log             # watch a real session
 ```
 
