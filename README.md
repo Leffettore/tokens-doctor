@@ -54,11 +54,41 @@ The installer keeps your existing hooks, is safe to re-run, and saves your origi
 
 ## Configuration (environment variables)
 
+Hooks run under Claude Code's background daemon, so variables exported in your shell may not reach them. Set them in the
+hook command in `~/.claude/settings.json`, e.g. `CLAUDE_IDLE_MS=60000 CLAUDE_WINDOW=1000000 node ~/.claude/idle-timer.js`
+(`CLAUDE_WINDOW` is also needed on the `--end` hook).
+
 | Variable | Default | Meaning |
 |---|---|---|
 | `CLAUDE_IDLE_MS` | `300000` | idle delay in ms |
 | `CLAUDE_WINDOW` | `200000` | context window in tokens (set it for 1M models) |
 | `CLAUDE_IDLE_COMPACT` | on | `0` = never type `/compact`, alarm/log only |
+
+## Shortcuts
+
+Add to `~/.bashrc` or `~/.zshrc`:
+
+```bash
+# start Claude Code inside a tmux session named after the folder (re-attaches if it already exists)
+cc() { tmux new-session -A -s "cc-$(basename "$PWD")" claude "$@"; }
+
+alias idlelog='tail -f ~/.claude/idle.log'                    # watch decisions live
+alias idlelast='grep -E "decision|sent /compact" ~/.claude/idle.log | tail -10'
+alias idletimers='pgrep -af "idle-timer.js --wait"'           # running timers
+alias idlestop='pkill -f "idle-timer.js --wait"'              # cancel all timers
+alias idletest='node ~/.claude/idle-timer.js --selftest'      # check the decision rules
+```
+
+Reading a log line:
+
+```
+decision: compact (56% messages, T 55%)          messages / usable window vs the threshold
+idle 300000ms elapsed, compact [My session]      what was done, for which session name
+sent /compact to tmux pane %3                    where it was typed
+```
+
+Quick manual check without waiting 5 minutes: put `CLAUDE_IDLE_MS=15000` in front of the Stop hook command in
+`~/.claude/settings.json`, send a prompt, wait 15 seconds, run `idlelast`. Remove it afterwards.
 
 ## Testing
 
