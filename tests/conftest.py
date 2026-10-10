@@ -7,6 +7,14 @@ import pytest
 from tokens_doctor import config
 
 
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path, monkeypatch):
+    """Every test gets its own HOME: on macOS the state and config folders live under it, not under XDG_*."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+
+
 @pytest.fixture
 def tree(tmp_path):
     """A copy of tests/fixtures in a folder whose name has a space and a non-ASCII character."""
