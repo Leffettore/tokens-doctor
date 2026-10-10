@@ -53,6 +53,7 @@ def parser() -> argparse.ArgumentParser:
     w = sub.add_parser("watch", help="internal: idle timer started by a hook")
     w.add_argument("--session", required=True)
     w.add_argument("--idle", default=None, help="e.g. 5m")
+    w.add_argument("--exit-check", action="store_true", help="internal: SessionEnd advice for next time")
     sub.add_parser("notify-test", help="try the notification and sound")
     return ap
 
