@@ -7,7 +7,7 @@ Two parts:
 
 - **Static audit / fix**: measures what sits in every session's context before you type anything (MCP servers,
   skills, `CLAUDE.md` and its `@imports`, plugins, agents, commands, built-in tools), and trims it with backups.
-- **Session monitor** (hooks): after each turn and after 5 idle minutes it checks the live session and sends a desktop
+- **Session monitor** (hooks): after each turn and after 4 idle minutes (just before the ~5 min prompt cache expires) it checks the live session and sends a desktop
   notification with a recommendation: `/compact`, `/clear`, or trim the config. Optionally it can type `/compact` for you in tmux.
 
 ## Install
@@ -92,7 +92,7 @@ to stdout and log errors to `monitor.log` in the state folder.
 
 **Decision rule** (`decide.py`, defaults in `config.py`, all overridable): `ratio = messages / (window - fixed overhead)`.
 Start at T = 70% and subtract: 10 (>50 messages) or 5 (20-50), 5 (an earlier compaction), 5 (tool output > half of messages),
-5 (peak hours), 10 (task finished); idle 5+ minutes or leaving subtracts another 15. These are percentage points of T, not minutes. T never goes below 40; from 80% compact immediately.
+5 (peak hours), 10 (task finished); idle 4+ minutes or leaving subtracts another 15. These are percentage points of T, not minutes. T never goes below 40; from 80% compact immediately.
 Under 20k tokens of messages: nothing. 2+ compactions, a finished task, or over 60 idle minutes: `/clear` instead (a
 handoff skeleton is saved). If a fixed component is over its target the advice includes "trim the config" (`fix-config`).
 The modifier sizes marked as peak/task-finished are this tool's choice; peak hours and "task finished" cannot be read

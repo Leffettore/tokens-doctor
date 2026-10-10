@@ -148,7 +148,7 @@ def test_hooks_flow(env, monkeypatch, capsys):
     sp = lambda sid, *a: spawned.append((sid, a)) or FakeProc()  # noqa: E731
     hooks.handle("Stop", {"session_id": "s1", "transcript_path": "/t.jsonl", "cwd": "/w"}, spawn=sp)
     st = state.State("s1").get()
-    assert spawned == [("s1", ("--idle", "5m"))] and st["pid"] == 999999 and st["transcript"] == "/t.jsonl"
+    assert spawned == [("s1", ("--idle", "4m"))] and st["pid"] == 999999 and st["transcript"] == "/t.jsonl"
     hooks.handle("UserPromptSubmit", {"session_id": "s1"}, spawn=sp)
     assert state.State("s1").get()["cancel"]
     hooks.handle("PreCompact", {"session_id": "s1"}, spawn=sp)

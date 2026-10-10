@@ -10,7 +10,7 @@ from . import platform as plat
 
 DEFAULTS: dict[str, Any] = {
     "window": "auto",  # or a number of tokens; auto = 200k, or 1m when the model is a [1m] one or a session passed 200k
-    "idle_minutes": 5,
+    "idle_minutes": 4,  # the prompt cache lasts ~5 min: act while it is still warm
     "mode": "suggest",  # suggest | apply
     "allow_clear": False,
     "peak_hours": None,  # e.g. [14, 18]: local hours counted as peak
@@ -24,7 +24,7 @@ DEFAULTS: dict[str, Any] = {
     "thresholds": {
         "base": 70, "floor": 40, "ceiling": 80,
         "away": 15, "msgs_50": 10, "msgs_20": 5, "compaction": 5, "tool_heavy": 5, "peak": 5, "task_done": 10,
-        "min_messages_tokens": 20000, "clear_idle_minutes": 60, "clear_after_compactions": 2,
+        "min_messages_tokens": 20000, "away_minutes": 4, "clear_idle_minutes": 60, "clear_after_compactions": 2,
         # component targets, percent of the window
         "mcp": 5, "skills": 2, "memory": 3, "total": 15,
         "mcp_tools": 15, "skill_description_chars": 300, "memory_tokens": 2000, "import_tokens": 1500,

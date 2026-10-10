@@ -51,7 +51,7 @@ def threshold(f: Facts, th: dict) -> tuple:
         t -= th["task_done"]
         why.append("task finished")
     t = max(t, th["floor"])
-    away = f.leaving or f.idle_minutes >= 5
+    away = f.leaving or f.idle_minutes >= th["away_minutes"]
     if away:
         t = max(t - th["away"], th["floor"])
         why.append("away" if f.leaving else f"idle {round(f.idle_minutes)} min")
