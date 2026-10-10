@@ -1,5 +1,0 @@
-{
-  "name": "tokens-doctor",
-  "private": true,
-  "scripts": { "test": "node --test test/*.test.js" }
-}

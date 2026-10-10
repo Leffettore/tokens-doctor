@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "gh-mcp"
+      ],
+      "env": {
+        "TOKEN": "secret-value"
+      }
+    }
+  },
+  "projects": {}
+}

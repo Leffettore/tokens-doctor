@@ -1,0 +1,4 @@
+{
+  "enabledPlugins": {"demo@market": true},
+  "permissions": {"allow": ["Bash(ls:*)"]}
+}

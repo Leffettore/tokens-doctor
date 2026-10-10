@@ -1,0 +1,4 @@
+---
+description: Plugin command
+---
+x

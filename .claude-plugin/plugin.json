@@ -1,8 +1,0 @@
-{
-  "name": "tokens-doctor",
-  "version": "0.2.0",
-  "description": "After 5 idle minutes, notifies you that the prompt cache expired and how many tokens the next message will re-read, so you can /compact or /clear.",
-  "author": { "name": "Leffettore", "url": "https://github.com/Leffettore" },
-  "repository": "https://github.com/Leffettore/tokens-doctor",
-  "keywords": ["context", "compact", "idle", "tokens", "cache"]
-}

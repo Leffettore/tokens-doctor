@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "db": {
+      "url": "https://example.invalid/mcp",
+      "headers": {
+        "Authorization": "Bearer hidden"
+      }
+    }
+  }
+}
