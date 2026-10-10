@@ -35,7 +35,7 @@ def parse_count(s: str) -> int:
 
 def parse_context(text: str) -> dict:
     """Parse the markdown output of /context: {'window': int, 'total': int, 'categories': {name: tokens}}."""
-    out: dict = {"window": 0, "total": 0, "categories": {}, "skills": []}
+    out: dict = {"window": 0, "total": 0, "categories": {}, "skills": [], "mcp_servers": {}}
     m = re.search(r"\*\*Tokens:\*\*\s*([\d.,]+[kKmM]?)\s*/\s*([\d.,]+[kKmM]?)", text)
     if m:
         out["total"], out["window"] = parse_count(m.group(1)), parse_count(m.group(2))
@@ -43,6 +43,12 @@ def parse_context(text: str) -> dict:
     for line in text.splitlines():
         if line.startswith("#"):
             section = line.lstrip("# ").strip().lower()
+        elif section == "mcp tools":
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) == 3 and re.fullmatch(r"[\d.,]+[kKmM]?", cells[2]):
+                srv = out["mcp_servers"].setdefault(cells[1], {"tools": 0, "tokens": 0})
+                srv["tools"] += 1
+                srv["tokens"] += parse_count(cells[2])
         elif section == "skills":
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
             if len(cells) == 3 and re.fullmatch(r"~?[\d.,]+[kKmM]?", cells[2]):
@@ -54,13 +60,18 @@ def parse_context(text: str) -> dict:
     return out
 
 
-def capture_context(claude: Optional[str] = None) -> Optional[dict]:
-    """Ask the installed Claude Code for its real numbers. This starts a real (tiny) Claude Code run."""
+def capture_context(claude: Optional[str] = None, attempts: int = 3) -> Optional[dict]:
+    """Ask the installed Claude Code for its real numbers. This starts real (tiny) Claude Code runs.
+    claude.ai connectors and synced skills load asynchronously, so a single run can miss them: keep the fullest of a few."""
     claude = claude or plat.find_claude()
     if not claude:
         return None
-    r = plat.run([claude, "-p", "/context", "--no-session-persistence"], timeout=120)
-    if not r or r.returncode != 0:
-        return None
-    parsed = parse_context(r.stdout)
-    return parsed if parsed["categories"] else None
+    best = None
+    for _ in range(attempts):
+        r = plat.run([claude, "-p", "/context", "--no-session-persistence"], timeout=120)
+        if r and r.returncode == 0:
+            parsed = parse_context(r.stdout)
+            fullness = len(parsed["mcp_servers"]) + len(parsed["skills"])
+            if parsed["categories"] and (best is None or fullness > best[0]):
+                best = (fullness, parsed)
+    return best[1] if best else None

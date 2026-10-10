@@ -15,7 +15,8 @@ def test_estimate():
 def test_parse_context():
     text = "**Tokens:** 13.6k / 1m (1%)\n\n### Estimated usage by category\n\n| Category | Tokens | Percentage |\n|---|---|---|\n| Skills | 6k | 0.6% |\n| MCP tools | 622 | 0.1% |\n\n### MCP Tools\n\n| Tool | Server | Tokens |\n| x | y | 153 |\n\n### Skills\n\n| Skill | Source | Tokens |\n|---|---|---|\n| pdf | claude.ai sync | ~150 |\n"
     assert parse_context(text) == {"window": 1000000, "total": 13600, "categories": {"Skills": 6000, "MCP tools": 622},
-                                   "skills": [{"name": "pdf", "source": "claude.ai sync", "tokens": 150}]}
+                                   "skills": [{"name": "pdf", "source": "claude.ai sync", "tokens": 150}],
+                                   "mcp_servers": {"y": {"tools": 1, "tokens": 153}}}
 
 
 def test_frontmatter():
@@ -98,3 +99,31 @@ def test_cli_exit_codes(tree, monkeypatch):
     args = ["audit", "--config-dir", str(tree / "claude"), "--project-path", str(tree / "project")]
     assert cli.main(args + ["--window", "2000"]) == 1  # everything over target
     assert cli.main(args) in (0, 1)
+
+
+def test_parse_context_mcp_servers_and_capture_keeps_fullest(monkeypatch):
+    from tokens_doctor import measure
+    full = ("**Tokens:** 1k / 1m (1%)\n\n### Estimated usage by category\n\n| Category | Tokens | Percentage |\n|---|---|---|\n| Skills | 1k | 0% |\n\n"
+            "### MCP Tools\n\n| Tool | Server | Tokens |\n|---|---|---|\n| mcp__a__x | claude_ai_Gmail | 1.5k |\n| mcp__a__y | claude_ai_Gmail | 500 |\n| mcp__d__z | claude_ai_Docs | 200 |\n")
+    empty = full.split("### MCP Tools")[0]
+    assert measure.parse_context(full)["mcp_servers"] == {"claude_ai_Gmail": {"tools": 2, "tokens": 2000}, "claude_ai_Docs": {"tools": 1, "tokens": 200}}
+    outs = iter([empty, full, empty])
+
+    class R:
+        returncode = 0
+
+        def __init__(self, out):
+            self.stdout = out
+    monkeypatch.setattr(measure.plat, "run", lambda *a, **k: R(next(outs)))
+    assert len(measure.capture_context("claude")["mcp_servers"]) == 2  # the run that raced is ignored
+
+
+def test_connector_deny_actions(ctx, tmp_path):
+    results = audit.run_audit(ctx)
+    results["mcp"]["real_servers"] = {"claude_ai_Gmail": {"tools": 30, "tokens": 18000}, "claude_ai_Claude_Docs": {"tools": 8, "tokens": 2000}, "other": {"tools": 1, "tokens": 5}}
+    run = backup.Run(tmp_path / "state")
+    acts = [a for a in audit.plan_actions(ctx, results, lambda: run) if a.text.startswith("Deny claude.ai connector")]
+    assert [a.text.split("'")[1] for a in acts] == ["Gmail", "Claude_Docs"]
+    acts[0].apply()  # the user keeps Docs: only Gmail is denied
+    deny = json.loads((ctx.claude_dir / "settings.json").read_text())["permissions"]["deny"]
+    assert "mcp__claude_ai_Gmail" in deny and "mcp__claude_ai_Claude_Docs" not in deny

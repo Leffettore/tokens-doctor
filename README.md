@@ -57,6 +57,14 @@ offers `skillOverrides` in `settings.json`: `name-only` (Claude still knows the 
 the context) or `off`. Both were measured to remove the skill's cost from `/context`. `--slim-skills` does it for all of them;
 `restore` undoes it.
 
+**claude.ai connectors** (Gmail, Drive, Calendar, Notion, Docs...) have no config file, but `permissions.deny` with
+`mcp__claude_ai_<Name>` removes a connector's tools from Claude Code only (your account is untouched). `fix --use-context`
+offers it per connector, so you can keep the ones you use. The `settings.json` keys `disabledMcpServers` and
+`deniedMcpServers` did not work in testing. Note that these tools are *deferred* (loaded on demand), so denying them
+shrinks the tool search space and the ~125k of deferred schemas, not the fresh-session total. `--use-context` runs
+`/context` up to 3 times and keeps the fullest result, because connectors and synced skills load asynchronously and a
+single run can miss them.
+
 **Safety:** dry-run by default; every modified file is copied to `~/.local/state/tokens-doctor/backup/<id>/`
 (`~/Library/Application Support/tokens-doctor/state` on macOS) with a manifest; nothing is deleted, only moved to
 `quarantine/<id>/`; JSON edits keep the file's line endings and indent and are re-parsed after writing; env values and

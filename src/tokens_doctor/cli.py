@@ -95,6 +95,8 @@ def _measure(a, ctx):
     real = capture_context() if getattr(a, "use_context", False) else None
     if real and "skills" in results:
         results["skills"]["real"] = real["skills"]
+    if real and "mcp" in results:
+        results["mcp"]["real_servers"] = real.get("mcp_servers", {})
     if real and real["window"] and not a.window:
         ctx.window = real["window"]  # the installed model's real window beats the 200k default
     return pre, results, audit.summarize(ctx, results), real

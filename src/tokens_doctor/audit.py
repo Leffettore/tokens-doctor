@@ -88,6 +88,10 @@ def plan_actions(ctx: Context, results: dict, run_ref: Callable) -> list:
             if s.scope in ("user", "local") and ctx.has("project"):
                 a.alt = ("p", "move to this project's .mcp.json", lambda s=s: mcp.move_to_project(run_ref(), s, ctx))
             actions.append(a)
+        for name, info in sorted(results["mcp"].get("real_servers", {}).items(), key=lambda kv: -kv[1]["tokens"]):
+            if name.startswith("claude_ai_"):  # account connectors: no config file, but permissions.deny removes them
+                actions.append(Action("mcp", f"Deny claude.ai connector '{name[10:]}' ({info['tools']} tools, ~{info['tokens']} tokens)",
+                                      lambda n=name: builtin_tools.deny(run_ref(), ctx, f"mcp__{n}"), tokens=info["tokens"]))
     if "memory" in results:
         for path, old, new, why in memory.propose(ctx, results["memory"]):
             diff = f"--- {path}\n+++ {path}\n- {old}\n+ {new}"
