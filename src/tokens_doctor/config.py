@@ -9,7 +9,7 @@ from typing import Any, Optional
 from . import platform as plat
 
 DEFAULTS: dict[str, Any] = {
-    "window": 200000,
+    "window": "auto",  # or a number of tokens; auto = 200k, or 1m when the model is a [1m] one or a session passed 200k
     "idle_minutes": 5,
     "mode": "suggest",  # suggest | apply
     "allow_clear": False,
@@ -46,6 +46,18 @@ def load(path: Optional[Path] = None) -> dict[str, Any]:
         if isinstance(th, dict):
             cfg["thresholds"].update(th)
     return cfg
+
+
+def resolve_window(cfg: dict[str, Any], claude_dir: Path, observed: int = 0) -> int:
+    """An explicit number wins. 'auto': 1m if settings.json picks a [1m] model or a session already used more than
+    200k, else 200k (a 1m window nobody fills only makes compaction advice come too late)."""
+    if isinstance(cfg["window"], (int, float)) and cfg["window"] > 0:
+        return int(cfg["window"])
+    try:
+        model = str(json.loads((claude_dir / "settings.json").read_text(encoding="utf-8")).get("model", ""))
+    except (OSError, ValueError, AttributeError):
+        model = ""
+    return 1_000_000 if "[1m]" in model.lower() or observed > 200_000 else 200_000
 
 
 @dataclass

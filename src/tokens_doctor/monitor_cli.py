@@ -24,7 +24,7 @@ def parse_minutes(s) -> float:
 def cmd_check(a) -> int:
     cfg = config.load()
     if a.window:
-        cfg["window"] = a.window
+        cfg["window"] = a.window  # an explicit number beats auto-detection
     claude_dir = plat.claude_dir(a.config_dir)
     path = session.find_transcript(claude_dir, a.session)
     if not path:

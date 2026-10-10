@@ -30,6 +30,7 @@ tokens-doctor                      # = tokens-doctor audit: changes nothing, exi
 tokens-doctor audit --use-context  # also runs `claude -p /context` (a tiny real Claude Code run) for the real numbers
 tokens-doctor audit --format md --report-dir ./reports --redact
 tokens-doctor fix                  # asks per change; --yes applies only the flagged ones
+tokens-doctor fix --slim-skills    # sets every skill over 50 tokens to name-only, no questions (reads /context first)
 tokens-doctor restore              # list backups;  tokens-doctor restore <id>  undoes a fix
 ```
 
@@ -49,6 +50,12 @@ Targets (share of the window): MCP < 5%, skills < 2%, memory < 3%, total < 15%. 
 or move it into the project's `.mcp.json`, write a `minimal.mcp.json` (+ the `--strict-mcp-config` launch hint), replace a
 big `@import` with an on-demand pointer (diff shown), quarantine or relocate skills, quarantine agents and commands,
 disable plugins (`enabledPlugins`), add `permissions.deny` entries for built-in tools you never use.
+
+**Skills.** The folder scan only sees your own and plugin skills; Claude Code also loads built-in and claude.ai-synced
+ones (about 6k tokens on the author's setup, 36 skills). `fix --use-context` lists all of them from `/context` and
+offers `skillOverrides` in `settings.json`: `name-only` (Claude still knows the skill exists, the description leaves
+the context) or `off`. Both were measured to remove the skill's cost from `/context`. `--slim-skills` does it for all of them;
+`restore` undoes it.
 
 **Safety:** dry-run by default; every modified file is copied to `~/.local/state/tokens-doctor/backup/<id>/`
 (`~/Library/Application Support/tokens-doctor/state` on macOS) with a manifest; nothing is deleted, only moved to
@@ -77,7 +84,7 @@ to stdout and log errors to `monitor.log` in the state folder.
 
 **Decision rule** (`decide.py`, defaults in `config.py`, all overridable): `ratio = messages / (window - fixed overhead)`.
 Start at T = 70% and subtract: 10 (>50 messages) or 5 (20-50), 5 (an earlier compaction), 5 (tool output > half of messages),
-5 (peak hours), 10 (task finished); idle 5+ minutes or leaving subtracts another 15. T never goes below 40; from 80% compact immediately.
+5 (peak hours), 10 (task finished); idle 5+ minutes or leaving subtracts another 15. These are percentage points of T, not minutes. T never goes below 40; from 80% compact immediately.
 Under 20k tokens of messages: nothing. 2+ compactions, a finished task, or over 60 idle minutes: `/clear` instead (a
 handoff skeleton is saved). If a fixed component is over its target the advice includes "trim the config" (`fix-config`).
 The modifier sizes marked as peak/task-finished are this tool's choice; peak hours and "task finished" cannot be read
@@ -94,13 +101,15 @@ check falls back to a notification that says why. Claude Code does not pass `TMU
 its `~/.claude/sessions/*.json` entry; sessions started with `claude attach` are not found.
 
 **Privacy:** the monitor reads token counts and structure from the transcript, never stores or prints message text
-(the handoff skeleton lists the transcript path, the files touched and an error count, not your requests), and makes no
-network calls.
+and makes no network calls. The one exception is the handoff skeleton written on `/clear` advice: it holds the transcript
+path, the files touched, an error count and your **last request** (first 500 characters), in a local file under
+`handoff/` in the state folder, so the next session can pick up. State files and the log never contain message text.
 
 ### config.json
 
 `$XDG_CONFIG_HOME/tokens-doctor/config.json` (`~/.config/...`) or `~/Library/Application Support/tokens-doctor/config.json`.
-Keys: `window` (**set it to match your model**, e.g. 1000000; `audit --use-context` reads the real one), `idle_minutes`,
+Keys: `window` (`"auto"` by default: 200k, or 1m when `settings.json` picks a `[1m]` model or a session already used more than 200k;
+a number overrides; `audit --use-context` reads the real one), `idle_minutes`,
 `mode`, `allow_clear`, `peak_hours` (`[14, 18]`), `quiet_hours` (`[22, 7]`), `sound`, `cooldown_minutes`,
 `max_watch_minutes`, `pane_commands`, `compact_note`, `mcp_tool_counts` (`{"server": 12}`), and `thresholds` (every number above).
 

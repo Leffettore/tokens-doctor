@@ -24,6 +24,8 @@ class SessionStats:
     last_ts: Optional[float] = None  # epoch seconds of the last entry
     files: list = field(default_factory=list)  # files touched by edit tools
     errors: int = 0  # tool results flagged as errors
+    max_tokens: int = 0  # largest context seen in the session (to tell a 1m window from a 200k one)
+    last_request: str = ""  # text of the last user prompt; only ever written to the handoff file
 
     @property
     def message_tokens(self) -> int:
@@ -37,6 +39,13 @@ def parse_ts(s) -> Optional[float]:
         return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
     except ValueError:
         return None
+
+
+def _prompt_text(content) -> str:
+    if isinstance(content, str):
+        return content.strip()[:500]
+    parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+    return " ".join(parts).strip()[:500]
 
 
 def read_session(path: Path) -> SessionStats:
@@ -67,6 +76,7 @@ def read_session(path: Path) -> SessionStats:
         if usage:
             st.tokens = sum(usage.get(k) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
             st.overhead = st.overhead or st.tokens
+            st.max_tokens = max(st.max_tokens, st.tokens)
         content = msg.get("content")
         if not content or e.get("isMeta") or e.get("isCompactSummary"):
             continue
@@ -87,6 +97,7 @@ def read_session(path: Path) -> SessionStats:
             other += size
             if e.get("type") == "user":
                 st.msgs += 1
+                st.last_request = _prompt_text(content)
     st.tool_share = tool / (tool + other) if tool + other else 0.0
     return st
 

@@ -35,11 +35,6 @@ def _plugin_tokens(install: Path) -> int:
     n = 0
     for sub, kind in (("agents", "agent"), ("commands", "command")):
         n += sum(i.tokens for i in _md_items(install / sub, kind, "plugin"))
-    skills_dir = install / "skills"
-    if skills_dir.is_dir():
-        for md in skills_dir.glob("*/SKILL.md"):
-            fm = parse_frontmatter(read_text(md))
-            n += estimate_tokens(f"{fm.get('name', md.parent.name)}\n{fm.get('description', '')}")
     return n
 
 

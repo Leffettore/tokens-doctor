@@ -17,7 +17,7 @@ def _common(p: argparse.ArgumentParser) -> None:
     p.add_argument("--scope", choices=["user", "project", "both"], default="both")
     p.add_argument("--project-path", default=".")
     p.add_argument("--config-dir", help="override the Claude Code user config location")
-    p.add_argument("--window", type=int, help="context window in tokens (default 200000)")
+    p.add_argument("--window", type=int, help="context window in tokens (default: auto-detected, see config.json)")
     p.add_argument("--format", choices=["text", "md", "json"], default="text")
     p.add_argument("--redact", action="store_true", help="hide user names and home paths")
     p.add_argument("--no-color", action="store_true")
@@ -36,6 +36,9 @@ def parser() -> argparse.ArgumentParser:
                        help="also run `claude -p /context` for the real numbers (starts a tiny Claude Code run)")
         if name == "fix":
             p.add_argument("--yes", action="store_true", help="apply only the flagged changes, without asking")
+            p.add_argument("--slim-skills", action="store_true",
+                           help="set every skill over 50 tokens (plugin, built-in, claude.ai) to name-only, without asking; "
+                                "implies --use-context")
     p = sub.add_parser("restore", help="undo a previous `fix` run")
     p.add_argument("backup_id", nargs="?", help="omit to list the available backups")
     c = sub.add_parser("check", help="check one session now and recommend /compact or /clear")
@@ -61,12 +64,13 @@ def parser() -> argparse.ArgumentParser:
 def make_context(a) -> config.Context:
     scope = getattr(a, "scope", "both")
     cfg = config.load()
+    claude_dir = plat.claude_dir(getattr(a, "config_dir", None))
     return config.Context(
-        claude_dir=plat.claude_dir(getattr(a, "config_dir", None)),
+        claude_dir=claude_dir,
         claude_json=plat.claude_json(getattr(a, "config_dir", None)),
         project=Path(getattr(a, "project_path", ".")).expanduser().resolve(),
         scopes=("user", "project") if scope == "both" else (scope,),
-        window=getattr(a, "window", None) or cfg["window"],
+        window=getattr(a, "window", None) or config.resolve_window(cfg, claude_dir),
         cfg=cfg,
     )
 
@@ -89,6 +93,8 @@ def _measure(a, ctx):
     pre = audit.preflight(ctx)
     results = audit.run_audit(ctx, _phases(a))
     real = capture_context() if getattr(a, "use_context", False) else None
+    if real and "skills" in results:
+        results["skills"]["real"] = real["skills"]
     if real and real["window"] and not a.window:
         ctx.window = real["window"]  # the installed model's real window beats the 200k default
     return pre, results, audit.summarize(ctx, results), real
@@ -122,17 +128,19 @@ def _ask(text: str, options: str = "y/N") -> str:
 
 
 def cmd_fix(a) -> int:
+    a.use_context = a.use_context or a.slim_skills
+    unattended = a.yes or a.slim_skills
     ctx = make_context(a)
     pre, results, summary, real = _measure(a, ctx)
     _emit(a, report.render(report.build(pre, results, summary, ctx.window, real), a.format))
     run = backup.Run(plat.state_dir())
     done, failed = [], 0
     for act in audit.plan_actions(ctx, results, lambda: run):
-        if a.yes and not act.flagged:
+        if unattended and not ((a.yes and act.flagged) or (a.slim_skills and act.slim)):
             continue
         if act.diff:
             print(act.diff)
-        choice = "y" if a.yes else _ask(act.text, "y/p/N" if act.alt else "y/N")
+        choice = "y" if unattended else _ask(act.text, "y/p/N" if act.alt else "y/N")
         fn = act.apply if choice == "y" else act.alt[2] if act.alt and choice == act.alt[0] else None
         if not fn:
             continue
@@ -142,7 +150,7 @@ def cmd_fix(a) -> int:
         except Exception as e:  # one bad change must not stop the others
             failed += 1
             print(f"FAILED: {act.text}: {e}", file=sys.stderr)
-    if "mcp" in results and not a.yes and results["mcp"]["servers"] and sys.stdin.isatty():
+    if "mcp" in results and not unattended and results["mcp"]["servers"] and sys.stdin.isatty():
         names = _ask("Essential MCP servers for a minimal.mcp.json (comma list, empty to skip)", "names")
         if names:
             out = ctx.project / "minimal.mcp.json"

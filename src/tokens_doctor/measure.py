@@ -35,15 +35,19 @@ def parse_count(s: str) -> int:
 
 def parse_context(text: str) -> dict:
     """Parse the markdown output of /context: {'window': int, 'total': int, 'categories': {name: tokens}}."""
-    out: dict = {"window": 0, "total": 0, "categories": {}}
+    out: dict = {"window": 0, "total": 0, "categories": {}, "skills": []}
     m = re.search(r"\*\*Tokens:\*\*\s*([\d.,]+[kKmM]?)\s*/\s*([\d.,]+[kKmM]?)", text)
     if m:
         out["total"], out["window"] = parse_count(m.group(1)), parse_count(m.group(2))
-    in_categories = False
+    section = ""
     for line in text.splitlines():
         if line.startswith("#"):
-            in_categories = "usage by category" in line.lower()
-        elif in_categories:
+            section = line.lstrip("# ").strip().lower()
+        elif section == "skills":
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) == 3 and re.fullmatch(r"~?[\d.,]+[kKmM]?", cells[2]):
+                out["skills"].append({"name": cells[0], "source": cells[1], "tokens": parse_count(cells[2].lstrip("~"))})
+        elif "usage by category" in section:
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
             if len(cells) == 3 and re.fullmatch(r"[\d.,]+[kKmM]?", cells[1]):
                 out["categories"][cells[0]] = parse_count(cells[1])

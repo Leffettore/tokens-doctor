@@ -405,14 +405,28 @@ def test_apply_mode_falls_back_to_suggest(env, sent):
     assert "auto-apply skipped" in sent[0][1]
 
 
-def test_handoff_has_no_message_text(tmp_path):
+def test_handoff_keeps_last_request_only_there(env, tmp_path):
     p = write_transcript(tmp_path / "h.jsonl", 900, extra=[
-        {"type": "user", "timestamp": iso(901), "message": {"content": "SECRET USER REQUEST"}}])
-    out = monitor.write_handoff(session.read_session(p), tmp_path / "ho")
-    assert "SECRET" not in out.read_text() and str(p) in out.read_text()
+        {"type": "user", "timestamp": iso(901), "message": {"content": "FIX THE LOGIN BUG " * 100}},
+        {"type": "user", "timestamp": iso(902), "message": {"content": [{"type": "tool_result", "content": "r"}]}}])
+    stats = session.read_session(p)
+    assert stats.last_request.startswith("FIX THE LOGIN BUG") and len(stats.last_request) == 500
+    out = monitor.write_handoff(stats, tmp_path / "ho")
+    assert "FIX THE LOGIN BUG" in out.read_text() and str(p) in out.read_text()
+
+
+def test_window_auto(env):
+    claude = env / "claude"
+    auto = {"window": "auto"}
+    assert config.resolve_window(auto, claude) == 200000
+    assert config.resolve_window(auto, claude, observed=250000) == 1000000
+    (claude / "settings.json").write_text('{"model": "opus[1m]"}')
+    assert config.resolve_window(auto, claude) == 1000000
+    assert config.resolve_window({"window": 500000}, claude, observed=900000) == 500000  # explicit wins
 
 
 def test_state_files_hold_no_text(env, sent):
     claude, st, p, t0 = setup_watch(env)
     watcher.watch("w1", 5, cfg_(sound=False), claude, FakeClock(t0 + 1), pid=4242)
     assert "hello" not in st.path.read_text() and "hello" not in (state.root() / "monitor.log").read_text()
+    assert not list((state.root() / "handoff").glob("*")) if (state.root() / "handoff").exists() else True

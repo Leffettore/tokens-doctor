@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from . import audit, notify, state
+from . import audit, config, notify, state
 from . import platform as plat
 from .config import Context
 from .decide import Decision, Facts, decide, level
@@ -31,14 +31,15 @@ def evaluate(cfg: dict, claude_dir: Path, path: Path, *, st: Optional[state.Stat
     idle = max(0.0, (now - stats.last_ts) / 60) if stats.last_ts else 0.0
     saved = (st.get() if st else {})
     over = []
+    window = config.resolve_window(cfg, claude_dir, stats.max_tokens)
     if components:
         ctx = Context(claude_dir=claude_dir, claude_json=plat.claude_json(str(claude_dir) if claude_dir != plat.claude_dir() else None),
-                      project=Path(stats.cwd or ".").expanduser(), window=cfg["window"], cfg=cfg)
+                      project=Path(stats.cwd or ".").expanduser(), window=window, cfg=cfg)
         try:
             over = audit.summarize(ctx, audit.run_audit(ctx))["over"]
         except OSError as e:
             state.log(f"component audit failed: {e}")
-    facts = Facts(window=cfg["window"], overhead=stats.overhead, tokens=stats.tokens, msgs=stats.msgs,
+    facts = Facts(window=window, overhead=stats.overhead, tokens=stats.tokens, msgs=stats.msgs,
                   compactions=max(stats.compactions, saved.get("compactions", 0)), tool_share=stats.tool_share,
                   idle_minutes=idle, peak=in_hours(cfg["peak_hours"], datetime.fromtimestamp(now)),
                   task_done=task_done, leaving=leaving, over_targets=over)
@@ -87,11 +88,12 @@ def level_check(cfg: dict, claude_dir: Path, st: state.State, path: Path, now: f
 
 
 def write_handoff(stats: SessionStats, dest_dir: Optional[Path] = None) -> Path:
-    """Facts only, no model call and no message text: where the transcript is and what was touched."""
+    """No model call: where the transcript is, the last request, and what was touched. The only place message text goes."""
     out = (dest_dir or state.root() / "handoff") / f"{stats.session_id}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     lines = ["# Handoff skeleton", "", f"- transcript: {stats.path}", f"- project: {stats.cwd}",
              f"- context: {stats.tokens:,} tokens, {stats.compactions} compaction(s), {stats.msgs} prompt(s) since the last",
-             f"- tool errors seen: {stats.errors}", "", "## Files touched"] + [f"- {f}" for f in stats.files[-30:]]
+             f"- tool errors seen: {stats.errors}", "", "## Last request", stats.last_request or "(none)", "",
+             "## Files touched"] + [f"- {f}" for f in stats.files[-30:]]
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return out

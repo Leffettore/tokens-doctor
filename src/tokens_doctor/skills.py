@@ -1,6 +1,7 @@
 """Skills: name + description are what sits in the context."""
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,16 +51,59 @@ def _scan(base: Path, scope: str) -> list:
     return out
 
 
+def overrides(ctx: Context) -> dict:
+    """skillOverrides from the user's settings.json: name -> on | name-only | user-invocable-only | off."""
+    try:
+        data = json.loads((ctx.claude_dir / "settings.json").read_text(encoding="utf-8")).get("skillOverrides", {})
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def _plugin_skills(ctx: Context) -> list:
+    out = []
+    try:
+        installed = json.loads((ctx.claude_dir / "plugins" / "installed_plugins.json").read_text(encoding="utf-8"))
+        enabled = json.loads((ctx.claude_dir / "settings.json").read_text(encoding="utf-8")).get("enabledPlugins", {})
+    except (OSError, ValueError):
+        return out
+    for key, entries in (installed.get("plugins") or {}).items():
+        entry = entries[0] if isinstance(entries, list) and entries else {}
+        if enabled.get(key, True) and isinstance(entry, dict) and entry.get("installPath"):
+            for s in _scan(Path(entry["installPath"]) / "skills", "plugin"):
+                s.name = f"{key.split('@')[0]}:{s.name}"
+                out.append(s)
+    return out
+
+
 def audit(ctx: Context) -> dict:
     skills = []
     if ctx.has("user"):
-        skills += _scan(ctx.claude_dir / "skills", "user")
+        skills += _scan(ctx.claude_dir / "skills", "user") + _plugin_skills(ctx)
     if ctx.has("project"):
         skills += _scan(ctx.project / ".claude" / "skills", "project")
     limit = ctx.th["skill_description_chars"]
+    ov = overrides(ctx)
+    for s in skills:  # a skill the user already turned down costs less
+        mode = ov.get(s.name)
+        if mode in ("off", "user-invocable-only"):
+            s.tokens = 0
+        elif mode == "name-only":
+            s.tokens = estimate_tokens(s.name)
     return {
         "tokens": sum(s.tokens for s in skills),
         "skills": skills,
         "findings": [f"skill {s.name}: description is {len(s.description)} chars (limit {limit})"
                      for s in skills if len(s.description) > limit],
     }
+
+
+def set_override(run, ctx: Context, name: str, mode: str) -> None:
+    """Per-skill switch in settings.json (any skill: built-in, plugin, claude.ai sync). Other keys are kept."""
+    path = ctx.claude_dir / "settings.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    data.setdefault("skillOverrides", {})[name] = mode
+    run.write_json(path, data)

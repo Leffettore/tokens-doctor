@@ -23,6 +23,7 @@ class Action:
     apply: Callable
     diff: str = ""
     flagged: bool = False  # triggered by a finding: the only ones `--yes` applies
+    slim: bool = False  # a skill override: `--slim-skills` applies these
     alt: Optional[tuple] = None  # (key, label, fn): a second choice at the prompt
     tokens: int = 0
     extra: dict = field(default_factory=dict)
@@ -93,13 +94,14 @@ def plan_actions(ctx: Context, results: dict, run_ref: Callable) -> list:
             actions.append(Action("memory", f"Replace a large import in {path}: {why}",
                                   lambda p=path, o=old, n=new: _edit_line(run_ref(), p, o, n), diff=diff, flagged=True))
     if "skills" in results:
-        for s in sorted(results["skills"]["skills"], key=lambda s: -s.tokens)[:10]:
+        for s in sorted((s for s in results["skills"]["skills"] if s.scope != "plugin"), key=lambda s: -s.tokens)[:10]:  # plugin skills: override only
             flagged = len(s.description) > ctx.th["skill_description_chars"]
             a = Action("skills", f"Quarantine skill '{s.name}' ({s.scope}, ~{s.tokens} tokens)",
                        lambda s=s: run_ref().quarantine(s.path), flagged=flagged, tokens=s.tokens)
             if s.scope == "user" and ctx.has("project"):
                 a.alt = ("p", "move into this project's .claude/skills", lambda s=s: _move_skill(run_ref(), s, ctx))
             actions.append(a)
+        actions += _override_actions(ctx, results["skills"], run_ref)
     if "extensions" in results:
         for i in sorted(results["extensions"]["items"], key=lambda i: -i.tokens):
             if i.kind == "plugin" and i.enabled:
@@ -113,6 +115,23 @@ def plan_actions(ctx: Context, results: dict, run_ref: Callable) -> list:
             actions.append(Action("builtin", f"Add '{tool}' to permissions.deny (only if you never use it)",
                                   lambda t=tool: builtin_tools.deny(run_ref(), ctx, t), tokens=tokens))
     return actions
+
+
+def _override_actions(ctx: Context, skills_result: dict, run_ref: Callable) -> list:
+    """Skills the folder scan cannot remove (plugin, built-in, claude.ai sync) can still be set to name-only / off."""
+    real = skills_result.get("real")
+    if real:
+        cands = [(r["name"], r["source"], r["tokens"]) for r in real if r["source"] not in ("User", "Project")]
+    else:
+        cands = [(s.name, "plugin", s.tokens) for s in skills_result["skills"] if s.scope == "plugin"]
+    out = []
+    for name, source, tokens in sorted(cands, key=lambda c: -c[2])[:15]:
+        if tokens < 50:
+            continue
+        out.append(Action("skills", f"Set skill '{name}' ({source}, ~{tokens} tokens) to name-only",
+                          lambda n=name: skills.set_override(run_ref(), ctx, n, "name-only"), slim=True, tokens=tokens,
+                          alt=("o", "turn it off completely", lambda n=name: skills.set_override(run_ref(), ctx, n, "off"))))
+    return out
 
 
 def _edit_line(run, path: Path, old: str, new: str) -> None:
