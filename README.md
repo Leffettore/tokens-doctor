@@ -76,7 +76,6 @@ alias idlelog='tail -f ~/.claude/idle.log'                    # watch decisions 
 alias idlelast='grep -E "decision|sent /compact" ~/.claude/idle.log | tail -10'
 alias idletimers='pgrep -af "idle-timer.js --wait"'           # running timers
 alias idlestop='pkill -f "idle-timer.js --wait"'              # cancel all timers
-alias idletest='node $(ls -d ~/.claude/plugins/cache/tokens-doctor/tokens-doctor/*/scripts/idle-timer.js | tail -1) --selftest'
 ```
 
 Reading a log line:
@@ -93,7 +92,7 @@ Quick manual check without waiting 5 minutes: set `"CLAUDE_IDLE_MS": "15000"` in
 ## Testing
 
 ```bash
-node scripts/idle-timer.js --selftest  # decision rules
+npm test                               # decision rules + transcript parsing
 tail -f ~/.claude/idle.log             # watch a real session
 ```
 
