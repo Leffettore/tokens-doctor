@@ -107,6 +107,8 @@ pane, only if: the pane still has the recorded id, its foreground process is `cl
 pane had no input in the last 5 seconds. `/clear` is sent only with `"allow_clear": true` *and* a saved handoff. Any failed
 check falls back to a notification that says why. Claude Code does not pass `TMUX_PANE` to hooks, so the pane is read from
 its `~/.claude/sessions/*.json` entry; sessions started with `claude attach` are not found.
+Over the ceiling (messages ≥ 80% of usable) it does not wait for idle: `/compact` is typed right after the turn ends,
+with the same pane checks. Below the ceiling it waits for `idle_minutes`.
 
 **Privacy:** the monitor reads token counts and structure from the transcript, never stores or prints message text
 and makes no network calls. The one exception is the handoff skeleton written on `/clear` advice: it holds the transcript

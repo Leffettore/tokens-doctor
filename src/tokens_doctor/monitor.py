@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from . import audit, config, notify, state
+from . import act, audit, config, notify, state
 from . import platform as plat
 from .config import Context
 from .decide import Decision, Facts, decide, level
@@ -84,6 +84,14 @@ def level_check(cfg: dict, claude_dir: Path, st: state.State, path: Path, now: f
     previous = st.get().get("last_action", "none")
     st.update(last_action=d.action)
     if level(d.action) > 0 and d.action != previous:
+        if cfg["mode"] == "apply" and d.urgent:  # the turn just ended, so the prompt is free: no need to wait for idle
+            res = act.try_apply("compact", st.get().get("pane", ""), cfg, last_ts=stats.last_ts, now=now,
+                                handoff_saved=False, allow_clear=False, urgent=True)
+            state.log(f"[{st.id[:8]}] apply compact (over ceiling): {res.reason}")
+            if res.ok:
+                return
+            emit(cfg, st, stats, d, idle, now, extra=f" (auto-apply skipped: {res.reason})")
+            return
         emit(cfg, st, stats, d, idle, now)
 
 

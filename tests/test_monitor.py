@@ -430,3 +430,18 @@ def test_state_files_hold_no_text(env, sent):
     watcher.watch("w1", 5, cfg_(sound=False), claude, FakeClock(t0 + 1), pid=4242)
     assert "hello" not in st.path.read_text() and "hello" not in (state.root() / "monitor.log").read_text()
     assert not list((state.root() / "handoff").glob("*")) if (state.root() / "handoff").exists() else True
+
+
+def test_apply_urgent_skips_idle_wait_but_not_other_checks():
+    recent = dict(A, now=A["last_ts"] + 10)
+    assert not act.try_apply("compact", "%3", cfg_(), run=tmux(), **recent).ok
+    assert act.try_apply("compact", "%3", cfg_(), run=tmux("%3|claude|0"), urgent=True, **recent).ok
+    assert not act.try_apply("compact", "%3", cfg_(), run=tmux("%3|vim|0"), urgent=True, **recent).ok
+
+
+def test_over_ceiling_applies_at_turn_end(env, sent, monkeypatch):
+    claude, st, p, t0 = setup_watch(env, tokens=30000 + 160000)  # 94% of usable: over the 80% ceiling
+    calls = []
+    monkeypatch.setattr(act, "try_apply", lambda *a, **k: calls.append(k) or act.Applied(True, "sent"))
+    monitor.level_check(cfg_(mode="apply", sound=False), claude, st, p, t0 + 1)
+    assert calls and calls[0]["urgent"] and sent == []  # compacted by itself, no notification

@@ -26,6 +26,7 @@ class Decision:
     reasons: list
     T: int
     ratio: float  # messages / usable window, 0..1
+    urgent: bool = False  # over the ceiling: apply mode may compact without waiting for idle
 
 
 def threshold(f: Facts, th: dict) -> tuple:
@@ -61,6 +62,7 @@ def decide(f: Facts, th: dict) -> Decision:
     usable = max(1, f.window - f.overhead)
     msg_tokens = max(0, f.tokens - f.overhead)
     ratio = msg_tokens / usable
+    urgent = False
     t, why = threshold(f, th)
     pct = round(100 * ratio)
     numbers = f"messages {pct}% of usable, T={t}%"
@@ -77,7 +79,7 @@ def decide(f: Facts, th: dict) -> Decision:
         action = "clear"
         reasons.append(f"idle {round(f.idle_minutes)} min, the cache is cold: /clear plus a handoff")
     elif ratio * 100 >= th["ceiling"]:
-        action = "compact"
+        action, urgent = "compact", True
         reasons.append(f"messages {pct}% of usable, over the {th['ceiling']}% ceiling: compact now")
     elif ratio * 100 >= t:
         action = "compact"
@@ -88,7 +90,7 @@ def decide(f: Facts, th: dict) -> Decision:
         reasons.append("fixed overhead over target (" + ", ".join(f.over_targets) + "): compaction cannot reduce it")
         if action == "none":
             action = "fix-config"
-    return Decision(action, reasons, t, ratio)
+    return Decision(action, reasons, t, ratio, urgent)
 
 
 def level(action: Optional[str]) -> int:

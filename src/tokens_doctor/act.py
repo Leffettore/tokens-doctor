@@ -33,14 +33,14 @@ def find_pane(session_id: str, claude_dir: Path) -> str:
 
 
 def try_apply(action: str, pane: str, cfg: dict, *, last_ts: Optional[float], now: float, handoff_saved: bool,
-              allow_clear: bool, run: Callable = plat.run) -> Applied:
+              allow_clear: bool, urgent: bool = False, run: Callable = plat.run) -> Applied:
     if action not in ("compact", "clear"):
         return Applied(False, "nothing to apply")
     if action == "clear" and not (allow_clear and handoff_saved):
         return Applied(False, "/clear needs --allow-clear and a saved handoff")
     if not pane:
         return Applied(False, "session is not in a known tmux pane")
-    if last_ts is None or now - last_ts < cfg["idle_minutes"] * 60 - 1:
+    if last_ts is None or (not urgent and now - last_ts < cfg["idle_minutes"] * 60 - 1):
         return Applied(False, "session was active too recently")
     r = run(["tmux", "display-message", "-p", "-t", pane, "#{pane_id}|#{pane_current_command}|#{window_activity}"])
     if not r or r.returncode != 0:
