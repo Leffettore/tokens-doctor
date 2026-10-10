@@ -5,7 +5,7 @@
   "plugins": [
     {
       "name": "tokens-doctor",
-      "description": "Idle-time context doctor for Claude Code (auto /compact or /clear alarm).",
+      "description": "Notifies you when the prompt cache has expired and the context is large.",
       "version": "0.2.0",
       "source": "./"
     }
