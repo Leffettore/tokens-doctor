@@ -50,9 +50,6 @@ claude plugin install tokens-doctor@tokens-doctor
 
 Restart running Claude Code sessions, and run `claude` inside tmux. Remove with `claude plugin uninstall tokens-doctor`.
 
-Upgrading from the old `install.sh` version: delete `~/.claude/idle-timer.js` and the three hooks that call it from
-`~/.claude/settings.json` (Stop, UserPromptSubmit, SessionEnd), otherwise both would run.
-
 ## Configuration (environment variables)
 
 Set them in the `env` block of `~/.claude/settings.json` (applied to every session; not tested through the hooks'
