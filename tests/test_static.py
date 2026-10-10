@@ -13,7 +13,7 @@ def test_estimate():
 
 
 def test_parse_context():
-    text = "**Tokens:** 13.6k / 1m (1%)\n\n| Category | Tokens | Percentage |\n|---|---|---|\n| Skills | 6k | 0.6% |\n| MCP tools | 622 | 0.1% |\n\n### MCP Tools\n\n| Tool | Server | Tokens |\n| x | y | 153 |\n"
+    text = "**Tokens:** 13.6k / 1m (1%)\n\n### Estimated usage by category\n\n| Category | Tokens | Percentage |\n|---|---|---|\n| Skills | 6k | 0.6% |\n| MCP tools | 622 | 0.1% |\n\n### MCP Tools\n\n| Tool | Server | Tokens |\n| x | y | 153 |\n"
     assert parse_context(text) == {"window": 1000000, "total": 13600, "categories": {"Skills": 6000, "MCP tools": 622}}
 
 

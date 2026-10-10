@@ -19,3 +19,4 @@ jobs:
         run: |
           tokens-doctor --help
           tokens-doctor audit --config-dir tests/fixtures/claude --project-path tests/fixtures/project --format json
+          tokens-doctor check --config-dir tests/fixtures/claude --session demo --format json || [ $? -eq 1 ]

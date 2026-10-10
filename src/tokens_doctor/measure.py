@@ -39,10 +39,14 @@ def parse_context(text: str) -> dict:
     m = re.search(r"\*\*Tokens:\*\*\s*([\d.,]+[kKmM]?)\s*/\s*([\d.,]+[kKmM]?)", text)
     if m:
         out["total"], out["window"] = parse_count(m.group(1)), parse_count(m.group(2))
-    for line in text.split("\n### ")[0].splitlines():
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) == 3 and re.fullmatch(r"[\d.,]+[kKmM]?", cells[1]):
-            out["categories"][cells[0]] = parse_count(cells[1])
+    in_categories = False
+    for line in text.splitlines():
+        if line.startswith("#"):
+            in_categories = "usage by category" in line.lower()
+        elif in_categories:
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) == 3 and re.fullmatch(r"[\d.,]+[kKmM]?", cells[1]):
+                out["categories"][cells[0]] = parse_count(cells[1])
     return out
 
 

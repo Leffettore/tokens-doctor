@@ -89,6 +89,8 @@ def _measure(a, ctx):
     pre = audit.preflight(ctx)
     results = audit.run_audit(ctx, _phases(a))
     real = capture_context() if getattr(a, "use_context", False) else None
+    if real and real["window"] and not a.window:
+        ctx.window = real["window"]  # the installed model's real window beats the 200k default
     return pre, results, audit.summarize(ctx, results), real
 
 
