@@ -1,4 +1,4 @@
-"""Backups, quarantine and restore. Nothing is ever deleted: every change can be undone from the manifest."""
+"""Backup of files before they are rewritten (used by install-hooks): copies and a manifest, nothing is deleted."""
 from __future__ import annotations
 
 import json
@@ -29,7 +29,6 @@ class Run:
             n += 1
             self.id = f"{base}-{n}"
         self.backup_dir = root / "backup" / self.id
-        self.quarantine_dir = root / "quarantine" / self.id
         self.actions: list[dict[str, Any]] = []
 
     def _rel(self, path: Path) -> Path:
@@ -47,15 +46,6 @@ class Run:
         shutil.copy2(path, dest)
         self.actions.append({"op": "modify", "path": str(path.resolve()), "backup": str(dest)})
         self._save()
-
-    def quarantine(self, path: Path) -> Path:
-        dest = self.quarantine_dir / self._rel(path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        src = str(path.resolve())
-        shutil.move(src, dest)
-        self.actions.append({"op": "quarantine", "path": src, "dest": str(dest)})
-        self._save()
-        return dest
 
     def write_bytes(self, path: Path, data: bytes) -> None:
         existed = path.exists()
@@ -83,34 +73,3 @@ class Run:
             if raw_bytes:
                 path.write_bytes(raw_bytes)
             raise FixError(f"{path} would not parse after the edit, original restored: {e}") from e
-
-
-def restore(root: Path, run_id: str) -> list[str]:
-    """Undo a run in reverse order. Returns one message per step; never overwrites newer files silently."""
-    manifest = root / "backup" / run_id / "manifest.json"
-    if not manifest.exists():
-        raise FixError(f"no backup named {run_id!r} under {root / 'backup'}")
-    msgs = []
-    for a in reversed(json.loads(manifest.read_text(encoding="utf-8"))):
-        path = Path(a["path"])
-        if a["op"] == "modify":
-            shutil.copy2(a["backup"], path)
-            msgs.append(f"restored {path}")
-        elif a["op"] == "quarantine":
-            if path.exists():
-                msgs.append(f"SKIPPED {path}: something exists there now, item left in {a['dest']}")
-            else:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(a["dest"], path)
-                msgs.append(f"moved back {path}")
-        elif a["op"] == "create" and path.exists():
-            dest = root / "quarantine" / run_id / "created" / path.name
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(path), dest)
-            msgs.append(f"removed {path} (kept in {dest})")
-    return msgs
-
-
-def list_runs(root: Path) -> list[str]:
-    d = root / "backup"
-    return sorted(p.name for p in d.iterdir() if p.is_dir()) if d.is_dir() else []

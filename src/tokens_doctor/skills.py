@@ -96,14 +96,3 @@ def audit(ctx: Context) -> dict:
         "findings": [f"skill {s.name}: description is {len(s.description)} chars (limit {limit})"
                      for s in skills if len(s.description) > limit],
     }
-
-
-def set_override(run, ctx: Context, name: str, mode: str) -> None:
-    """Per-skill switch in settings.json (any skill: built-in, plugin, claude.ai sync). Other keys are kept."""
-    path = ctx.claude_dir / "settings.json"
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        data = {}
-    data.setdefault("skillOverrides", {})[name] = mode
-    run.write_json(path, data)

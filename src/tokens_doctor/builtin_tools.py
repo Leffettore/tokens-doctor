@@ -30,16 +30,3 @@ def audit(ctx: Context) -> dict:
     d = denied(ctx)
     suggestions = {k: v for k, v in CANDIDATES.items() if k not in d}
     return {"tokens": 0, "suggestions": suggestions, "findings": []}
-
-
-def deny(run, ctx: Context, tool: str) -> None:
-    path = (ctx.project / ".claude" / "settings.json") if ctx.has("project") and not ctx.has("user") \
-        else ctx.claude_dir / "settings.json"
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        data = {}
-    lst = data.setdefault("permissions", {}).setdefault("deny", [])
-    if tool not in lst:
-        lst.append(tool)
-    run.write_json(path, data)

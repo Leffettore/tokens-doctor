@@ -63,14 +63,3 @@ def audit(ctx: Context) -> dict:
         items += _md_items(ctx.project / ".claude" / "agents", "agent", "project")
         items += _md_items(ctx.project / ".claude" / "commands", "command", "project")
     return {"tokens": sum(i.tokens for i in items if i.enabled), "items": items, "findings": []}
-
-
-def disable_plugin(run, ctx: Context, name: str) -> None:
-    """Disable through the supported config key; other keys in settings.json are kept."""
-    path = ctx.claude_dir / "settings.json"
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        data = {}
-    data.setdefault("enabledPlugins", {})[name] = False
-    run.write_json(path, data)

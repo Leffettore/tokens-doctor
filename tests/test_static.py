@@ -3,7 +3,7 @@ import json
 import pytest
 
 from tests.conftest import snapshot
-from tokens_doctor import audit, backup, cli, mcp, memory, skills
+from tokens_doctor import backup, cli, mcp, memory, skills
 from tokens_doctor.measure import estimate_tokens, parse_context, parse_count
 
 
@@ -32,7 +32,6 @@ def test_memory_imports_and_cycles(ctx):
     assert "docs/big.md" in raws and "docs/loop-a.md" in raws and "not-an-import.md" not in raws
     assert any("cycle" in fl for fl in proj.flags) and any("changelog" in fl for fl in proj.flags)
     assert r["tokens"] > 5000  # big.md counted through the import
-    assert memory.propose(ctx, r)  # big import -> pointer proposal
 
 
 def test_windows_path_import_skipped(ctx):
@@ -59,28 +58,6 @@ def test_audit_changes_nothing(tree, capsys):
     assert "secret-value" not in json.dumps(data)
 
 
-def test_fix_restore_roundtrip_and_crlf(tree, ctx, monkeypatch, tmp_path):
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    before = snapshot(tree)
-    results = audit.run_audit(ctx)
-    run = backup.Run(tmp_path / "state" / "tokens-doctor")
-    for act in audit.plan_actions(ctx, results, lambda: run):
-        act.apply()
-    after = snapshot(tree)
-    assert after != before
-    # CRLF settings.json keeps its endings after the plugin was disabled and deny entries were added
-    raw = (tree / "claude" / "settings.json").read_bytes()
-    assert b"\r\n" in raw and b"\n" not in raw.replace(b"\r\n", b"")
-    data = json.loads(raw)
-    assert data["enabledPlugins"]["demo@market"] is False and "WebFetch" in data["permissions"]["deny"]
-    assert data["permissions"]["allow"] == ["Bash(ls:*)"]  # other keys kept
-    assert not (tree / "claude" / "skills" / "big-skill").exists()  # quarantined, not deleted
-    assert any(run.quarantine_dir.rglob("SKILL.md"))
-    backup.restore(tmp_path / "state" / "tokens-doctor", run.id)
-    restored = {k: v for k, v in snapshot(tree).items()}
-    assert restored == before
-
-
 def test_write_json_failure_leaves_original(tmp_path):
     p = tmp_path / "a.json"
     p.write_text('{"a": 1}\n')
@@ -88,11 +65,6 @@ def test_write_json_failure_leaves_original(tmp_path):
     with pytest.raises(TypeError):
         run.write_json(p, {"bad": {1, 2}})  # not serializable
     assert p.read_text() == '{"a": 1}\n'
-
-
-def test_restore_unknown(tmp_path):
-    with pytest.raises(backup.FixError):
-        backup.restore(tmp_path, "nope")
 
 
 def test_cli_exit_codes(tree, monkeypatch):
@@ -116,14 +88,3 @@ def test_parse_context_mcp_servers_and_capture_keeps_fullest(monkeypatch):
             self.stdout = out
     monkeypatch.setattr(measure.plat, "run", lambda *a, **k: R(next(outs)))
     assert len(measure.capture_context("claude")["mcp_servers"]) == 2  # the run that raced is ignored
-
-
-def test_connector_deny_actions(ctx, tmp_path):
-    results = audit.run_audit(ctx)
-    results["mcp"]["real_servers"] = {"claude_ai_Gmail": {"tools": 30, "tokens": 18000}, "claude_ai_Claude_Docs": {"tools": 8, "tokens": 2000}, "other": {"tools": 1, "tokens": 5}}
-    run = backup.Run(tmp_path / "state")
-    acts = [a for a in audit.plan_actions(ctx, results, lambda: run) if a.text.startswith("Deny claude.ai connector")]
-    assert [a.text.split("'")[1] for a in acts] == ["Gmail", "Claude_Docs"]
-    acts[0].apply()  # the user keeps Docs: only Gmail is denied
-    deny = json.loads((ctx.claude_dir / "settings.json").read_text())["permissions"]["deny"]
-    assert "mcp__claude_ai_Gmail" in deny and "mcp__claude_ai_Claude_Docs" not in deny

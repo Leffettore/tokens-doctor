@@ -5,8 +5,8 @@ Keep [Claude Code](https://claude.com/claude-code)'s **fixed context overhead** 
 
 Two parts:
 
-- **Static audit / fix**: measures what sits in every session's context before you type anything (MCP servers,
-  skills, `CLAUDE.md` and its `@imports`, plugins, agents, commands, built-in tools), and trims it with backups.
+- **Static audit**: measures what sits in every session's context before you type anything (MCP servers,
+  skills, `CLAUDE.md` and its `@imports`, plugins, agents, commands, built-in tools). It changes nothing; you trim by hand.
 - **Session monitor** (hooks): after each turn and after 4 idle minutes (just before the ~5 min prompt cache expires) it checks the live session and sends a desktop
   notification with a recommendation: `/compact`, `/clear`, or trim the config. Optionally it can type `/compact` for you in tmux.
 
@@ -29,9 +29,6 @@ filesystem; `/mnt/c/...` works but is slower (the tool warns).
 tokens-doctor                      # = tokens-doctor audit: changes nothing, exit 1 if over a target
 tokens-doctor audit --use-context  # also runs `claude -p /context` (a tiny real Claude Code run) for the real numbers
 tokens-doctor audit --format md --report-dir ./reports --redact
-tokens-doctor fix                  # asks per change; --yes applies only the flagged ones
-tokens-doctor fix --slim-skills    # sets every skill over 50 tokens to name-only, no questions (reads /context first)
-tokens-doctor restore              # list backups;  tokens-doctor restore <id>  undoes a fix
 ```
 
 Example (a test setup with a 20k window):
@@ -41,34 +38,25 @@ Component             Tokens  % window  Target
 MCP tools             8,000   40.0%     <5%     WARN
 Memory files          5,675   28.4%     <3%     WARN
 ...
-2 change(s) applied, undo with: tokens-doctor restore 20261010-141818
-  Skills: 111 -> 6 tokens (OK)
-  Memory files: 5,675 -> 56 tokens (OK)
 ```
 
-Targets (share of the window): MCP < 5%, skills < 2%, memory < 3%, total < 15%. What `fix` can do: remove an MCP server
-or move it into the project's `.mcp.json`, write a `minimal.mcp.json` (+ the `--strict-mcp-config` launch hint), replace a
-big `@import` with an on-demand pointer (diff shown), quarantine or relocate skills, quarantine agents and commands,
-disable plugins (`enabledPlugins`), add `permissions.deny` entries for built-in tools you never use.
+Targets (share of the window): MCP < 5%, skills < 2%, memory < 3%, total < 15%.
 
 **Skills.** The folder scan only sees your own and plugin skills; Claude Code also loads built-in and claude.ai-synced
-ones (about 6k tokens on the author's setup, 36 skills). `fix --use-context` lists all of them from `/context` and
-offers `skillOverrides` in `settings.json`: `name-only` (Claude still knows the skill exists, the description leaves
-the context) or `off`. Both were measured to remove the skill's cost from `/context`. `--slim-skills` does it for all of them;
-`restore` undoes it.
+ones (about 6k tokens on the author's setup, 36 skills). `audit --use-context` lists all of them from `/context`. To shrink
+them, set `skillOverrides` in `settings.json` by hand: `name-only` (Claude still knows the skill exists, the description
+leaves the context) or `off`.
 
 **claude.ai connectors** (Gmail, Drive, Calendar, Notion, Docs...) have no config file, but `permissions.deny` with
-`mcp__claude_ai_<Name>` removes a connector's tools from Claude Code only (your account is untouched). `fix --use-context`
-offers it per connector, so you can keep the ones you use. The `settings.json` keys `disabledMcpServers` and
+`mcp__claude_ai_<Name>` removes a connector's tools from Claude Code only (your account is untouched); add it per connector, so you can keep the ones you use. The `settings.json` keys `disabledMcpServers` and
 `deniedMcpServers` did not work in testing. Note that these tools are *deferred* (loaded on demand), so denying them
 shrinks the tool search space and the ~125k of deferred schemas, not the fresh-session total. `--use-context` runs
 `/context` up to 3 times and keeps the fullest result, because connectors and synced skills load asynchronously and a
 single run can miss them.
 
-**Safety:** dry-run by default; every modified file is copied to `~/.local/state/tokens-doctor/backup/<id>/`
-(`~/Library/Application Support/tokens-doctor/state` on macOS) with a manifest; nothing is deleted, only moved to
-`quarantine/<id>/`; JSON edits keep the file's line endings and indent and are re-parsed after writing; env values and
-auth headers are masked in reports; `--redact` strips your user name and home path so output can be pasted in an issue.
+**Safety:** `audit` is read-only; env values and auth headers are masked in reports; `--redact` strips your user name
+and home path so output can be pasted in an issue. `install-hooks` / `uninstall-hooks` copy `settings.json` to
+`~/.local/state/tokens-doctor/backup/<id>/` (`~/Library/Application Support/tokens-doctor/state` on macOS) before editing it.
 
 ## Session monitor
 
@@ -94,7 +82,7 @@ to stdout and log errors to `monitor.log` in the state folder.
 Start at T = 70% and subtract: 10 (>50 messages) or 5 (20-50), 5 (an earlier compaction), 5 (tool output > half of messages),
 5 (peak hours), 10 (task finished); idle 4+ minutes or leaving subtracts another 15. These are percentage points of T, not minutes. T never goes below 40; from 80% compact immediately.
 Under 20k tokens of messages: nothing. 2+ compactions, a finished task, or over 60 idle minutes: `/clear` instead (a
-handoff skeleton is saved). If a fixed component is over its target the advice includes "trim the config" (`fix-config`).
+handoff skeleton is saved). If a fixed component is over its target the advice includes "trim the config" (`fix-config`; by hand).
 The modifier sizes marked as peak/task-finished are this tool's choice; peak hours and "task finished" cannot be read
 from a transcript, so they come from `config.json` (`peak_hours`) and `check --task-done`.
 

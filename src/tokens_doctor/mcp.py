@@ -63,27 +63,3 @@ def audit(ctx: Context) -> dict:
     limit = ctx.th["mcp_tools"]
     findings = [f"server {s.name}: {s.tools} tools (limit {limit})" for s in servers if s.tools and s.tools > limit]
     return {"tokens": sum(s.tokens for s in servers), "servers": servers, "findings": findings}
-
-
-def remove_server(run, server: Server, ctx: Context) -> None:
-    """Delete one server entry from its config file (backed up first)."""
-    data = read_json(server.file) or {}
-    if server.scope == "local":
-        holder = data["projects"][str(ctx.project)]["mcpServers"]
-    else:
-        holder = data["mcpServers"]
-    holder.pop(server.name, None)
-    run.write_json(server.file, data)
-
-
-def move_to_project(run, server: Server, ctx: Context) -> None:
-    """Move a user-scope server into the project's .mcp.json."""
-    target = ctx.project / ".mcp.json"
-    proj = read_json(target) or {}
-    proj.setdefault("mcpServers", {})[server.name] = server.spec
-    run.write_json(target, proj)
-    remove_server(run, server, ctx)
-
-
-def write_minimal(run, essential: list, ctx: Context, out: Path) -> None:
-    run.write_json(out, {"mcpServers": {s.name: s.spec for s in essential}})

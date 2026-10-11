@@ -10,7 +10,7 @@ from . import __version__, audit, backup, config, report
 from . import platform as plat
 from .measure import capture_context
 
-COMMANDS = ("audit", "fix", "restore", "check", "install-hooks", "uninstall-hooks", "hook", "watch", "notify-test")
+COMMANDS = ("audit", "check", "install-hooks", "uninstall-hooks", "hook", "watch", "notify-test")
 
 
 def _common(p: argparse.ArgumentParser) -> None:
@@ -27,20 +27,12 @@ def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="tokens-doctor", description=__doc__.splitlines()[0])
     ap.add_argument("--version", action="version", version=__version__)
     sub = ap.add_subparsers(dest="cmd")
-    for name in ("audit", "fix"):
-        p = sub.add_parser(name, help="audit (changes nothing)" if name == "audit" else "apply static changes")
-        _common(p)
-        p.add_argument("--only", help="comma list of: " + ",".join(audit.PHASES))
-        p.add_argument("--report-dir")
-        p.add_argument("--use-context", action="store_true",
-                       help="also run `claude -p /context` for the real numbers (starts a tiny Claude Code run)")
-        if name == "fix":
-            p.add_argument("--yes", action="store_true", help="apply only the flagged changes, without asking")
-            p.add_argument("--slim-skills", action="store_true",
-                           help="set every skill over 50 tokens (plugin, built-in, claude.ai) to name-only, without asking; "
-                                "implies --use-context")
-    p = sub.add_parser("restore", help="undo a previous `fix` run")
-    p.add_argument("backup_id", nargs="?", help="omit to list the available backups")
+    p = sub.add_parser("audit", help="audit (changes nothing)")
+    _common(p)
+    p.add_argument("--only", help="comma list of: " + ",".join(audit.PHASES))
+    p.add_argument("--report-dir")
+    p.add_argument("--use-context", action="store_true",
+                   help="also run `claude -p /context` for the real numbers (starts a tiny Claude Code run)")
     c = sub.add_parser("check", help="check one session now and recommend /compact or /clear")
     _common(c)
     c.add_argument("--session")
@@ -122,66 +114,6 @@ def cmd_audit(a) -> int:
     return 1 if summary["over"] else 0
 
 
-def _ask(text: str, options: str = "y/N") -> str:
-    try:
-        return input(f"{text} [{options}] ").strip().lower()
-    except EOFError:
-        return ""
-
-
-def cmd_fix(a) -> int:
-    a.use_context = a.use_context or a.slim_skills
-    unattended = a.yes or a.slim_skills
-    ctx = make_context(a)
-    pre, results, summary, real = _measure(a, ctx)
-    _emit(a, report.render(report.build(pre, results, summary, ctx.window, real), a.format))
-    run = backup.Run(plat.state_dir())
-    done, failed = [], 0
-    for act in audit.plan_actions(ctx, results, lambda: run):
-        if unattended and not ((a.yes and act.flagged) or (a.slim_skills and act.slim)):
-            continue
-        if act.diff:
-            print(act.diff)
-        choice = "y" if unattended else _ask(act.text, "y/p/N" if act.alt else "y/N")
-        fn = act.apply if choice == "y" else act.alt[2] if act.alt and choice == act.alt[0] else None
-        if not fn:
-            continue
-        try:
-            fn()
-            done.append(act.text)
-        except Exception as e:  # one bad change must not stop the others
-            failed += 1
-            print(f"FAILED: {act.text}: {e}", file=sys.stderr)
-    if "mcp" in results and not unattended and results["mcp"]["servers"] and sys.stdin.isatty():
-        names = _ask("Essential MCP servers for a minimal.mcp.json (comma list, empty to skip)", "names")
-        if names:
-            out = ctx.project / "minimal.mcp.json"
-            audit.minimal_mcp(ctx, results, [n.strip() for n in names.split(",")], out, run)
-            done.append(f"wrote {out}")
-            if "--strict-mcp-config" in pre["supports"]:
-                print(f"launch with: claude --mcp-config {out} --strict-mcp-config")
-    if not done:
-        print("nothing changed")
-        return 2 if failed else 0
-    pre2, results2, summary2, _ = _measure(a, ctx)
-    print(f"\n{len(done)} change(s) applied, undo with: tokens-doctor restore {run.id}")
-    for before, after in zip(summary["rows"], summary2["rows"]):
-        print(f"  {before['component']}: {before['tokens']:,} -> {after['tokens']:,} tokens ({after['status']})")
-    _write_reports(a, ctx, pre2, results2, summary2, None)
-    return 2 if failed else (1 if summary2["over"] else 0)
-
-
-def cmd_restore(a) -> int:
-    root = plat.state_dir()
-    if not a.backup_id:
-        runs = backup.list_runs(root)
-        print("\n".join(runs) if runs else "no backups")
-        return 0
-    for m in backup.restore(root, a.backup_id):
-        print(m)
-    return 0
-
-
 def main(argv=None) -> int:
     ap = parser()
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -189,8 +121,8 @@ def main(argv=None) -> int:
         argv.insert(0, "audit")  # audit is the default command
     a = ap.parse_args(argv)
     try:
-        if a.cmd in ("audit", "fix", "restore"):
-            return {"audit": cmd_audit, "fix": cmd_fix, "restore": cmd_restore}[a.cmd](a)
+        if a.cmd == "audit":
+            return cmd_audit(a)
         from . import monitor_cli  # the session monitor, imported only when used
         return monitor_cli.dispatch(a)
     except (backup.FixError, OSError) as e:

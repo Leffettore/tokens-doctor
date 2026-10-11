@@ -91,17 +91,3 @@ def audit(ctx: Context) -> dict:
         "findings": [f"{f.path}: {fl}" for f in files for fl in f.flags]
         + ([f"memory is {total} tokens, target ~{ctx.th['memory_tokens']}"] if total > ctx.th["memory_tokens"] else []),
     }
-
-
-def propose(ctx: Context, result: dict) -> list:
-    """Big imports -> a one-line pointer (read on demand instead of always loaded). Returns (path, old_line, new_line, why)."""
-    out = []
-    for f in result["files"]:
-        for raw, target, tokens, _ in f.imports:
-            if target is not None and tokens >= ctx.th["import_tokens"]:
-                for line in read_text(f.path).splitlines():
-                    if f"@{raw}" in line and not line.lstrip().startswith("```"):
-                        new = line.replace(f"@{raw}", f"{raw}").rstrip() + " (read it only when relevant)"
-                        out.append((f.path, line, new, f"{raw} costs ~{tokens} tokens on every session"))
-                        break
-    return out
